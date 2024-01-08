@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"github.com/ericlln/whereisgo/server/pkg/db"
 	"github.com/ericlln/whereisgodata/internal/config"
-	"github.com/ericlln/whereisgodata/internal/db"
 	"github.com/ericlln/whereisgodata/internal/importdata"
 	"github.com/robfig/cron"
 	"log"
@@ -28,14 +28,14 @@ func main() {
 
 	c := cron.New()
 
-	err = c.AddFunc("@every month", func() {
+	err = c.AddFunc("@monthly", func() {
 		//importdata.UpdateStaticData(pg)
 	})
 	if err != nil {
 		log.Fatalf("Error adding CRON job: %s", err)
 	}
 
-	err = c.AddFunc("@every 10s", func() { importdata.GetRealTimeData(redis) })
+	err = c.AddFunc("@every 10s", func() { importdata.GetRealTimeData(redis, pg) })
 	if err != nil {
 		log.Fatalf("Error adding CRON job: %s", err)
 	}
