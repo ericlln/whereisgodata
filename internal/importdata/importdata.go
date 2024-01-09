@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ericlln/whereisgo/server/pkg/db"
 	"github.com/ericlln/whereisgodata/internal/config"
-	"github.com/ericlln/whereisgodata/internal/db"
 	"github.com/ericlln/whereisgodata/internal/limiter"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
@@ -267,7 +267,16 @@ func estToUnix(t time.Time) int64 {
 		loc).Unix()
 }
 
-func updateBusLocations(r *db.Redis) {
+func getBusType(busString string) int {
+	switch busString {
+	case "Coach":
+		return 0
+	default: // revisit
+		return 1
+	}
+}
+
+func updateBusLocations(r *db.Redis, pg *db.Postgres) {
 	ctx := context.Background()
 	url := fmt.Sprintf("http://api.openmetrolinx.com/OpenDataAPI/api/V1/ServiceataGlance/Buses/All?key=%s", transitApiKey)
 
@@ -291,6 +300,13 @@ func updateBusLocations(r *db.Redis) {
 	}
 
 	var positions []*redis.GeoLocation
+
+	batch := &pgx.Batch{}
+	query := `INSERT INTO trips (trip_id, route_number, start_time, end_time, bus_type, first_stop, prev_stop, last_stop, delay, timestamp) 
+							VALUES (@tripId, @routeNumber, @startTime, @endTime, @busType, @firstStop, @prevStop, @lastStop, @delay, @timestamp)
+							ON CONFLICT (trip_id)
+							DO UPDATE SET prev_stop = @prevStop, delay = @delay`
+
 	_, err = r.Client.Pipelined(ctx, func(pipe redis.Pipeliner) error {
 		for _, trip := range feed.Trips.Trip {
 			if trip.IsInMotion == false {
@@ -299,9 +315,47 @@ func updateBusLocations(r *db.Redis) {
 
 			parsedTime, err := time.Parse("2006-01-02 15:04:05", trip.ModifiedDate)
 			if err != nil {
-				log.Printf("Error parsing date: %s \n", err)
+				log.Println("Error parsing date:", err)
 				continue
 			}
+
+			parsedTripId, err := strconv.Atoi(trip.TripNumber)
+			if err != nil {
+				log.Println("Error parsing TripNumber:", err)
+				continue
+			}
+
+			parsedFirstStop, err := strconv.Atoi(trip.FirstStopCode)
+			if err != nil {
+				log.Println("Error parsing FirstStopCode:", err)
+				continue
+			}
+
+			// A trip can have no previous stop at a given time
+			parsedPrevStop, err := strconv.Atoi(trip.PrevStopCode)
+			if err != nil {
+				parsedPrevStop = -1
+			}
+
+			parsedLastStop, err := strconv.Atoi(trip.LastStopCode)
+			if err != nil {
+				log.Println("Error parsing LastStopCode:", err)
+				continue
+			}
+
+			args := pgx.NamedArgs{
+				"tripId":      parsedTripId,
+				"routeNumber": trip.RouteNumber,
+				"startTime":   trip.StartTime,
+				"endTime":     trip.EndTime,
+				"busType":     getBusType(trip.BusType),
+				"firstStop":   parsedFirstStop,
+				"prevStop":    parsedPrevStop,
+				"lastStop":    parsedLastStop,
+				"delay":       trip.DelaySeconds,
+				"timestamp":   estToUnix(parsedTime),
+			}
+			batch.Queue(query, args)
 
 			positions = append(positions, &redis.GeoLocation{
 				Name:      trip.TripNumber,
@@ -331,18 +385,38 @@ func updateBusLocations(r *db.Redis) {
 		return nil
 	})
 
+	results := pg.Db.SendBatch(ctx, batch)
+	defer func(results pgx.BatchResults) {
+		err := results.Close()
+		if err != nil {
+			log.Println("Error closing batch results: ", err)
+		}
+	}(results)
+
+	errorCount := 0
+	for i := 0; i < batch.Len(); i++ {
+		_, err := results.Exec()
+
+		if err != nil {
+			log.Println("Error inserting row: ", err)
+			errorCount++
+			continue
+		}
+	}
+	log.Println(batch.Len()-errorCount, "rows were successfully updated/inserted into {trips}")
+
 	err = r.Client.GeoAdd(ctx, "locates", positions...).Err()
 	if err != nil {
 		log.Printf("Unable to update locates: %s \n", err)
 	}
 }
 
-// GetRealTimeData updates locations of vehicles, designed to be run every couple of seconds
-func GetRealTimeData(redis *db.Redis) {
+// GetRealTimeData updates locations of vehicles and stores trip information, designed to be run every couple of seconds
+func GetRealTimeData(redis *db.Redis, postgres *db.Postgres) {
 	startTime := time.Now()
 	log.Println("GetRealTimeData was started")
 
-	updateBusLocations(redis)
+	updateBusLocations(redis, postgres)
 
 	log.Println("GetRealTimeData was completed in: ", time.Since(startTime))
 }
