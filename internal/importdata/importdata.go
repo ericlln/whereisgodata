@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ericlln/whereisgo/server/pkg/config"
 	"github.com/ericlln/whereisgo/server/pkg/db"
-	"github.com/ericlln/whereisgodata/internal/config"
 	"github.com/ericlln/whereisgodata/internal/limiter"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
@@ -22,7 +22,7 @@ var (
 )
 
 func init() {
-	transitApiKey = config.GetConfig().TransitApiKey
+	transitApiKey = config.GetConfig("whereisgodata").TransitApiKey
 	if transitApiKey == "" {
 		log.Println("TransitApiKey could not be retrieved from config")
 	}

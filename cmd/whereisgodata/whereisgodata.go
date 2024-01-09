@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"github.com/ericlln/whereisgo/server/pkg/config"
 	"github.com/ericlln/whereisgo/server/pkg/db"
-	"github.com/ericlln/whereisgodata/internal/config"
 	"github.com/ericlln/whereisgodata/internal/importdata"
 	"github.com/robfig/cron"
 	"log"
@@ -14,7 +14,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	cfg := config.GetConfig()
+	cfg := config.GetConfig("whereisgodata")
 
 	pg, err := db.NewPG(ctx, cfg.DatabaseUrl)
 	if err != nil {
