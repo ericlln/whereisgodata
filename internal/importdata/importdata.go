@@ -376,7 +376,7 @@ func updateBusLocations(r *db.Redis, pg *db.Postgres) {
 				continue
 			}
 
-			err = pipe.Set(ctx, trip.TripNumber, posJson, 0).Err()
+			err = pipe.Set(ctx, trip.TripNumber, posJson, time.Hour).Err()
 			if err != nil {
 				log.Printf("Error updating key: %s \n", err)
 				continue
@@ -405,9 +405,14 @@ func updateBusLocations(r *db.Redis, pg *db.Postgres) {
 	}
 	log.Println(batch.Len()-errorCount, "rows were successfully updated/inserted into {trips}")
 
+	err = r.Client.Del(ctx, "locates").Err()
+	if err != nil {
+		log.Println("Error deleting locates:", err)
+	}
+
 	err = r.Client.GeoAdd(ctx, "locates", positions...).Err()
 	if err != nil {
-		log.Printf("Unable to update locates: %s \n", err)
+		log.Println("Unable to update locates:", err)
 	}
 }
 

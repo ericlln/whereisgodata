@@ -16,6 +16,7 @@ func main() {
 	ctx := context.Background()
 	cfg := config.GetConfig("whereisgodata")
 
+	// Get db connections
 	pg, err := db.NewPG(ctx, cfg.DatabaseUrl)
 	if err != nil {
 		log.Fatal("Error creating database connection")
@@ -26,21 +27,24 @@ func main() {
 		log.Fatal("Error creating Redis connection")
 	}
 
+	// Main program functionality
 	c := cron.New()
 
 	err = c.AddFunc("@monthly", func() {
 		//importdata.UpdateStaticData(pg)
 	})
 	if err != nil {
-		log.Fatalf("Error adding CRON job: %s", err)
+		log.Fatalln("Error adding static data CRON job:", err)
 	}
 
-	err = c.AddFunc("@every 10s", func() { importdata.GetRealTimeData(redis, pg) })
+	err = c.AddFunc("@every 15s", func() { importdata.GetRealTimeData(redis, pg) })
 	if err != nil {
-		log.Fatalf("Error adding CRON job: %s", err)
+		log.Fatalln("Error adding realtime data CRON job:", err)
 	}
+
 	c.Start()
 
+	// Stopping program
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	select {
