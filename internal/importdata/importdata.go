@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	_ "time/tzdata"
 )
 
 var (
