@@ -3,7 +3,7 @@ module github.com/ericlln/whereisgodata
 go 1.21.3
 
 require (
-	github.com/ericlln/whereisgo/server v0.0.0-20240109192621-fa5789e113b5
+	github.com/ericlln/whereisgo/server v0.0.0-20240113224218-59511a8a3c5a
 	github.com/jackc/pgx/v5 v5.5.1
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.4.0
